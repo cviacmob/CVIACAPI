@@ -32,12 +32,7 @@ function ($request, $response, $args)
 	{
 	get_EmpID($args['emp_code']);
 	});
-/**$app->post('/employee_add',function($request, $response, $args) {
 
-// Validation($email);
-
-add_employee($request->getParsedBody());//Request object�s <code>getParsedBody()</code> method to parse the HTTP request
-});**/
 $app->put('/update_employee',
 function ($request, $response, $args)
 	{
@@ -187,55 +182,6 @@ function get_emp()
 	$db = null;
 	echo json_encode($data);
 	}
-
-/**function add_employee($data) {
-$db = connect_db();
-
-// $data=array(emp_code,emp_name,email,mobile,dob,gender,manager,department,designation,status);
-// $data_string = json_encode($data);
-
-$sql = "insert into employee (emp_code,emp_name,email,mobile,dob,gender,manager,department,designation,status)"
-. " VALUES('$data[emp_code]','$data[emp_name]','$data[email]','$data[mobile]','$data[dob]','$data[gender]','$data[manager]','$data[department]','$data[designation]','$data[status]')";
-$exe = $db->query($sql);
-$last_id = $db->insert_id;
-$db = null;
-if (!empty($last_id))
-echo $last_id;
-  else
-echo false;
-} **/
-/**function reg_employee($data) {
-if($this->get_request_method()!='POST'){
-$this->response('',406);
-}
-
-$mobile=$this->_request['mobile'];
-$Otp=$this->_request['otp'];
-if(!empty($mobile)){
-if(filter_var($mobile,FILTER_VALIDATE_MOBILE)){
-$db = connect_db();
-
-// $data=array(emp_code,emp_name,email,mobile,dob,gender,manager,department,designation,status);
-// $data_string = json_encode($data);
-
-$sql = "insert into reg_employee (mobile,otp,created_date)"
-. " VALUES('$data[mobile]','$Otp(otp)','now()')";
-$exe = $db->query($sql);
-$db->insert;
-
-// $last = $db->insert;
-
-$db = null;
-}
-}
-
-if (!empty($last))
-echo $last;
-  else
-echo false;
-}
-
-**/
 
 function update_employee($data)
 	{
