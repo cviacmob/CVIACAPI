@@ -1,7 +1,10 @@
-<?php
+﻿<?php
 require 'vendor/autoload.php';
 
 require 'mysql.php';
+include('lib/Way2SMS/way2sms-api.php');
+require 'phpmailer/class.phpmailer.php';
+
 
 $app = new Slim\App();
 $app->get('/', 'get_employees');
@@ -27,12 +30,22 @@ function ($request, $response, $args)
 	{
 	verifyotp($request->getParsedBody()); //Request object’s <code>getParsedBody()</code> method to parse the HTTP request
 	});
+	$app->post('/additionalregistration',
+function ($request, $response, $args)
+	{
+	registration($request->getParsedBody()); //Request object’s <code>getParsedBody()</code> method to parse the HTTP request
+	});
 $app->get('/employee/{emp_code}',
 function ($request, $response, $args)
 	{
 	get_EmpID($args['emp_code']);
 	});
+/**$app->post('/employee_add',function($request, $response, $args) {
 
+// Validation($email);
+
+add_employee($request->getParsedBody());//Request object�s <code>getParsedBody()</code> method to parse the HTTP request
+});**/
 $app->put('/update_employee',
 function ($request, $response, $args)
 	{
@@ -63,6 +76,14 @@ function ($request, $response, $args)
 	{
 	sentpush_msg($request->getParsedBody()); //Request object’s <code>getParsedBody()</code> method to parse the HTTP request
 	});
+	$app->post('/sendemail',function ($request, $response, $args)
+	{
+	sendemail($request->getParsedBody()); //Request object’s <code>getParsedBody()</code> method to parse the HTTP request
+	});
+	$app->post('/sendsms',function ($request, $response, $args)
+	{
+	send_sms($request->getParsedBody()); //Request object’s <code>getParsedBody()</code> method to parse the HTTP request
+	});
 $app->run();
 
 function get_employees()
@@ -75,16 +96,36 @@ function get_employees()
 	echo json_encode($data);
 	}
 
-function get_EmpID($emp_code)
+function verify_employee($emp_code)
 	{
 	$db = connect_db();
+	$sql = "SELECT * FROM employee WHERE `emp_code` = '$emp_code'";
+	$exe = $db->query($sql);
+	$db = null;
+	if ($exe->num_rows > 0)
+		{
+		return true;
+		}
+
+	return false;
+	}
+function get_EmpID($emp_code)
+	{
+	$result=array();
+	$db = connect_db();
+	if(verify_employee($emp_code)){
 	$sql = "SELECT * FROM employee WHERE `emp_code` = '$emp_code'";
 	$exe = $db->query($sql);
 	$data = $exe->fetch_all(MYSQLI_ASSOC);
 	$db = null;
 	echo json_encode($data);
 	}
-
+	else{
+	$result['code']=1003;
+	$result['desc']="Emp_code not found";
+	echo json_encode($result);
+	}
+	}
 function checkMobile($mobile)
 	{
 	$db = connect_db();
@@ -114,11 +155,33 @@ function generatePIN($digits = 6)
 
 function insertOTP($otp, $mobile)
 	{
-	$db = connect_db();
+	  $db = connect_db();
+	 if(verifyMobile($mobile)){
+		$sql="update reg_employee set otp='$otp' where mobile='$mobile'";
+		$exe = $db->query($sql);
+	//	echo $response;
+	}
+	else{
 	$sql = "insert into reg_employee (mobile,otp)" . " VALUES($mobile,$otp)";
 	$exe = $db->query($sql);
+			}
 	$db = null;
+
+}
+	
+/**	$sql = "insert into reg_employee (mobile,otp)" . " VALUES($mobile,$otp)";
+	$exe = $db->query($sql);**/
+	function verifyMobile($mobile){
+		$db=connect_db();
+		$sql="select * from reg_employee where mobile='$mobile'";
+		$exe=$db->query($sql);
+			$db=null;
+	if($exe->num_rows>0){
+		return true;
 	}
+	return false;
+	}
+	
 
 function verifyPIN($mobile, $otp)
 	{
@@ -127,13 +190,12 @@ function verifyPIN($mobile, $otp)
 	$exe = $db->query($sql);
 	$db = null;
 	if ($exe->num_rows > 0)
-		{
+		{ 
 		return true;
 		}
 
 	return false;
 	}
-
 function verifyotp($data)
 	{
 	$mobile = $data["mobile"];
@@ -141,8 +203,13 @@ function verifyotp($data)
 	$result = array();
 	if (verifyPIN($mobile, $otp))
 		{
+		$today = date("Y-m-d H:i:s"); 
+		$db=connect_db();
+		$sql="update reg_employee set verified_date='$today' where mobile='$mobile'";
+		$exe=$db->query($sql);
 		$result['code'] = 0;
 		$result['desc'] = "Success";
+
 		}
 	  else
 		{
@@ -155,20 +222,29 @@ function verifyotp($data)
 
 function reg_otp($data)
 	{
-	$mobile = $data["mobile"];
+	$mobile = $data['mobile'];
 	$result = array();
+    if(!preg_match('/^\+?([0-9]{1,4})\)?[-. ]?([0-9]{9})$/',$mobile)) {
+	$result[]=1010;
+	$result[]="Mobile number not valid";
+	}
+	
+	else{
 	if (checkMobile($mobile))
 		{
-		$otp = generatePIN(5);
+	 	$otp = generatePIN(6);
 		insertOTP($otp, $mobile);
+		$res = sendWay2SMS('7904446431','mob1234', $mobile, $otp.' CVIAC APP Registration Confirmation Code');
 		$result['code'] = 0;
 		$result['desc'] = "Success";
 		}
-	  else
-		{
-		$result['code'] = 1001;
-		$result['desc'] = "mobile number is not found";
+		else{
+		$result['code'] =1001;
+		$result['desc'] = "Mobile Number Not Found";
 		}
+		}
+	
+		
 
 	echo json_encode($result);
 	}
@@ -182,6 +258,38 @@ function get_emp()
 	$db = null;
 	echo json_encode($data);
 	}
+function verification($data){
+	$emp_code=$data['emp_code'];
+	$dob=$data['dob'];
+	$db=connect_db();
+	$sql="select * from employee where emp_code='$emp_code' and dob='$dob'";
+	$exe=$db->query($sql);
+	$db=null;
+	if($exe->num_rows>0){
+		return true;
+	}
+return false;
+}
+function registration($data){
+	$mobile=$data['mobile'];
+	$result=array();
+	if(verification($data)){
+		$otp=generatePIN();
+		$res = sendWay2SMS('7904446431','mob1234', $mobile, $otp.' CVIAC APP Registration Confirmation Code');
+		insertOTP($otp, $mobile);
+		$db=connect_db();
+		$sql="update employee set mobile='$mobile' where emp_code='$data[emp_code]'";
+		$exe = $db->query($sql);
+		$db = null;
+		$result['code']=0;
+		$result['desc']="success";
+	}
+	else {
+		$result['code']=1003;
+		$result['desc']="emp_code not found";
+	}
+		echo json_encode($result);
+}
 
 function update_employee($data)
 	{
@@ -216,12 +324,12 @@ function add_push_id($data)
 	$db = null;
 	if (!empty($last_id))
 		{
-		$result['code'] = "0";
+		$result['code'] = 0;
 		$result['desc'] = "success";
 		}
 	  else
 		{
-		$result['code'] = "1003";
+		$result['code'] = 1003;
 		$result['desc'] = "emp_code not found";
 		}
 
@@ -259,4 +367,58 @@ function get_event()
 	echo json_encode($data);
 	}
 
+function sendemail($data){
+		$mail = new PHPMailer();
+    $mail->CharSet =  "utf-8";
+    $mail->IsSMTP();
+    $mail->SMTPAuth = true;
+    $mail->Username = "cviacmobility@gmail.com";
+    $mail->Password = "tech@cviac";
+	$mail->SMTPSecure = "ssl";  
+    $mail->Host = "smtp.gmail.com";
+    $mail->Port = "465";
+  
+   // $mail->setFrom('cviacmobility.com', 'your name');
+    //$mail->AddAddress('gunaseelan240@gmail.com', 'receivers name');
+ 
+    //$mail->Subject  =  'using PHPMailer';
+    //$mail->IsHTML(true);
+    //$mail->Body    = 'Hi there ,
+	                 // <br />
+					  //this mail was sent using PHPMailer...
+					  //<br />
+					  //cheers... :)';
+				//	$mail->setFrom($data['username']);
+					$mail->AddAddress($data['email']);
+					$mail->Subject=$data['subject'];
+					$mail->Body=$data['message'];
+	if($mail->Send())
+	{
+		$result=array();
+		$result['code']=0;
+		$result['desc']="Message was Successfully Send :)";
+		echo json_encode($result);
+	}
+	else
+	{
+		$result=array();
+		$result['code']=1013;
+		$result['desc']="Mail Error - >".$mail->ErrorInfo;
+		echo json_encode($result);
+	}
+		
+
+	}
+
+function send_sms($data){
+	$result=array();
+	$mobile=$data['mobile'];
+	$msg=$data['msg'];
+	 $res=sendWay2SMS('7904446431','mob1234', $mobile, $msg);
+	 /**.' http://apps.cviac.com/mobileapps/cviacapp.apk'**/
+	 $result['code']=0;
+	 $result['desc']="success";
+         echo json_encode($result);
+	 }
+	
 ?>
